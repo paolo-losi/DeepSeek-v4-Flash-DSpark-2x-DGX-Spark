@@ -25,6 +25,14 @@ set +a
 : "${MASTER_PORT:?MASTER_PORT must be set in $ENV_FILE}"
 : "${DSPARK_VLLM_IMAGE:?DSPARK_VLLM_IMAGE must be set in $ENV_FILE}"
 
+case "${KV_CACHE_DTYPE:-fp8}" in
+  fp8|fp8_ds_mla) ;;
+  *)
+    echo "KV_CACHE_DTYPE must be fp8 or fp8_ds_mla; NVFP4 is not allowed by this profile." >&2
+    exit 2
+    ;;
+esac
+
 echo "DSpark config:"
 echo "  worker: ${WORKER_HOST}"
 echo "  master: ${MASTER_ADDR}:${MASTER_PORT}"
@@ -35,6 +43,9 @@ echo "  max model len: ${MAX_MODEL_LEN:-1048576}"
 echo "  max num seqs: ${MAX_NUM_SEQS:-6}"
 echo "  max batched tokens: ${MAX_NUM_BATCHED_TOKENS:-8192}"
 echo "  gpu memory utilization: ${GPU_MEMORY_UTILIZATION:-0.80}"
+echo "  KV cache dtype: ${KV_CACHE_DTYPE:-fp8}"
+echo "  speculative decoding: ${ENABLE_DSPARK_SPECULATIVE:-0}"
+echo "  enforce eager: ${ENFORCE_EAGER:-1}"
 echo "  spec tokens (MTP_NUM_TOKENS): ${MTP_NUM_TOKENS:-5} with draft_sample_method=probabilistic (min 5 = dspark_block_size)"
 echo "  cudagraph capture size: $(( ${MAX_NUM_SEQS:-6} * (${MTP_NUM_TOKENS:-5} + 1) )) (max_num_seqs * (mtp + 1))"
 echo "  breakable cudagraph: ${VLLM_USE_BREAKABLE_CUDAGRAPH:-0}"
@@ -42,9 +53,15 @@ echo "  dspark slot clamp: ${DSPARK_SLOT_CLAMP:-1}"
 echo "  sampling override: none (no --override-generation-config; --generation-config vllm only)"
 echo "  WO projection: ${VLLM_USE_B12X_WO_PROJECTION:-1}"
 echo "  host bind: ${VLLM_HOST:-127.0.0.1}"
+if [ -n "${VLLM_API_KEY:-}" ]; then
+  echo "  API authentication: configured"
+else
+  echo "  API authentication: DISABLED"
+fi
 echo
 echo "Rendered vLLM command:"
 env -u MASTER_PORT -u NODE_RANK -u HEADLESS -u WORKER_HOST -u MASTER_ADDR \
   COMPOSE_DISABLE_ENV_FILE=1 \
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config \
-  | grep -E -- '--max-model-len|--max-num-seqs|--max-num-batched-tokens|--max-cudagraph-capture-size|--gpu-memory-utilization|--master-port|--kv-cache-dtype|--speculative-config|--async-scheduling|--enable-chunked-prefill|--generation-config|image:|VLLM_USE_B12X_WO_PROJECTION|VLLM_USE_BREAKABLE_CUDAGRAPH|VLLM_USE_FLASHINFER_SAMPLER|MTP_NUM_TOKENS'
+  | grep -E -- '--max-model-len|--max-num-seqs|--max-num-batched-tokens|--max-cudagraph-capture-size|--gpu-memory-utilization|--master-port|--kv-cache-dtype|--speculative-config|--async-scheduling|--enable-chunked-prefill|--generation-config|image:|VLLM_USE_B12X_WO_PROJECTION|VLLM_USE_BREAKABLE_CUDAGRAPH|VLLM_USE_FLASHINFER_SAMPLER|MTP_NUM_TOKENS' \
+  | sed -E 's/(--api-key )[[:graph:]]+/\1<redacted>/g'

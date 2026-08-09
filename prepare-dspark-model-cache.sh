@@ -47,8 +47,13 @@ need_cmd docker
 mkdir -p "$HF_CACHE"
 verify_local_image
 
-# Serve profiles keep HF_HUB_OFFLINE=1; download must ignore that for this run only.
-echo "prepare: forcing HF online for download (serve can keep HF_HUB_OFFLINE=1)" >&2
+# Serve profiles keep HF_HUB_OFFLINE=1; a download must ignore that for this
+# run only. Verification always remains local and offline.
+if [ "${VERIFY_ONLY:-0}" = "1" ]; then
+  echo "prepare: verifying the local cache offline" >&2
+else
+  echo "prepare: forcing HF online for download (serve can keep HF_HUB_OFFLINE=1)" >&2
+fi
 
 run_download() {
   docker run --rm -i \
@@ -57,6 +62,7 @@ run_download() {
     -e HF_HUB_OFFLINE=0 \
     -e TRANSFORMERS_OFFLINE=0 \
     -e HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}" \
+    -e HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-0}" \
     -e DSPARK_MODEL="$DSPARK_MODEL" \
     -e HF_DOWNLOAD_WORKERS="$HF_DOWNLOAD_WORKERS" \
     --entrypoint "$IMAGE_PYTHON" \
@@ -72,6 +78,7 @@ verify_cache() {
     -e HF_HUB_OFFLINE=1 \
     -e TRANSFORMERS_OFFLINE=1 \
     -e HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}" \
+    -e HF_XET_HIGH_PERFORMANCE="${HF_XET_HIGH_PERFORMANCE:-0}" \
     -e DSPARK_MODEL="$DSPARK_MODEL" \
     --entrypoint "$IMAGE_PYTHON" \
     "$DSPARK_VLLM_IMAGE" \
@@ -96,7 +103,9 @@ if missing:
 PY
 }
 
-run_download
+if [ "${VERIFY_ONLY:-0}" != "1" ]; then
+  run_download
+fi
 verify_cache
 
 if [ "${PREPARE_WORKER:-1}" = "1" ]; then

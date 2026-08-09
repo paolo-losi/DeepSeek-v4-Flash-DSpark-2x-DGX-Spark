@@ -106,7 +106,22 @@ case "$DEFAULT_THINKING" in
     exit 2
     ;;
 esac
-export VLLM_HOST VLLM_PORT PORT DEFAULT_THINKING
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
+case "$KV_CACHE_DTYPE" in
+  fp8|fp8_ds_mla) ;;
+  *)
+    echo "KV_CACHE_DTYPE must be fp8 or fp8_ds_mla for the stable DeepSeek profile (got: $KV_CACHE_DTYPE)" >&2
+    exit 2
+    ;;
+esac
+ENABLE_DSPARK_SPECULATIVE="${ENABLE_DSPARK_SPECULATIVE:-0}"
+ENFORCE_EAGER="${ENFORCE_EAGER:-1}"
+case "$ENABLE_DSPARK_SPECULATIVE:$ENFORCE_EAGER" in
+  0:0|0:1|1:0|1:1) ;;
+  *) echo "ENABLE_DSPARK_SPECULATIVE and ENFORCE_EAGER must be 0 or 1." >&2; exit 2 ;;
+esac
+export VLLM_HOST VLLM_PORT PORT DEFAULT_THINKING KV_CACHE_DTYPE
+export ENABLE_DSPARK_SPECULATIVE ENFORCE_EAGER
 
 # A wildcard is valid for binding but not a useful health-check destination.
 API_HOST="${API_HOST:-$VLLM_HOST}"
@@ -119,6 +134,10 @@ if [[ "$URL_HOST" == *:* && "$URL_HOST" != \[*\] ]]; then
 fi
 API_URL="${API_URL:-http://$URL_HOST:$VLLM_PORT/v1/models}"
 CHAT_URL="${CHAT_URL:-http://$URL_HOST:$VLLM_PORT/v1/chat/completions}"
+AUTH_HEADER_ARGS=()
+if [ -n "${VLLM_API_KEY:-}" ]; then
+  AUTH_HEADER_ARGS=(-H "Authorization: Bearer $VLLM_API_KEY")
+fi
 
 : "${WORKER_HOST:?WORKER_HOST must be set in $ENV_FILE}"
 : "${MASTER_ADDR:?MASTER_ADDR must be set in $ENV_FILE}"
@@ -383,9 +402,20 @@ print_resolved_profile() {
   echo "  max num seqs: ${MAX_NUM_SEQS:-12}"
   echo "  max batched tokens: ${MAX_NUM_BATCHED_TOKENS:-8192}"
   echo "  gpu memory utilization: ${GPU_MEMORY_UTILIZATION:-0.80}"
-  echo "  mtp speculative tokens: ${MTP_NUM_TOKENS:-5} (dspark_block_size min is 5)"
+  echo "  KV cache dtype: $KV_CACHE_DTYPE (fp8 maps to DeepSeek fp8_ds_mla on GB10)"
+  echo "  speculative decoding: $ENABLE_DSPARK_SPECULATIVE"
+  echo "  enforce eager: $ENFORCE_EAGER"
+  if [ "$ENABLE_DSPARK_SPECULATIVE" = "1" ]; then
+    echo "  mtp speculative tokens: ${MTP_NUM_TOKENS:-5} (dspark_block_size min is 5)"
+  else
+    echo "  mtp speculative tokens: inactive"
+  fi
   echo "  default thinking: $DEFAULT_THINKING (off/low/high/max)"
-  echo "  cudagraph capture size: $(( ${MAX_NUM_SEQS:-6} * (${MTP_NUM_TOKENS:-5} + 1) ))"
+  if [ "$ENFORCE_EAGER" = "1" ]; then
+    echo "  cudagraph capture: disabled by eager mode"
+  else
+    echo "  cudagraph capture size: $(( ${MAX_NUM_SEQS:-6} * (${MTP_NUM_TOKENS:-5} + 1) ))"
+  fi
   echo "  API bind: $VLLM_HOST:$VLLM_PORT"
   echo "  API probe: $API_URL"
   echo "  head fabric IP: $VLLM_HOST_IP"
@@ -492,12 +522,12 @@ compose_base 0 "" up -d
 echo "Waiting for DSpark vLLM API..."
 print_initial_startup_logs
 for _ in $(seq 1 "$WAIT_ATTEMPTS"); do
-  if curl -fsS --max-time 5 "$API_URL" >/dev/null 2>&1; then
+  if curl -fsS --max-time 5 "${AUTH_HEADER_ARGS[@]}" "$API_URL" >/dev/null 2>&1; then
     echo "DeepSeek V4 Flash DSpark is running: $API_URL"
     compose_base 0 "" ps
     remote_compose "docker compose -p '$PROJECT_NAME' --env-file .env.dspark -f docker-compose.dspark.yml ps"
     echo "Running minimal OpenAI-compatible chat request..."
-    curl -fsS --max-time 60 "$CHAT_URL" \
+    curl -fsS --max-time 60 "${AUTH_HEADER_ARGS[@]}" "$CHAT_URL" \
       -H "Content-Type: application/json" \
       -d '{"model":"'"${SERVED_MODEL_NAME:-deepseek-v4-flash-dspark}"'","messages":[{"role":"user","content":"Reply with OK."}],"temperature":0.0}' >/dev/null
     echo "Minimal chat request succeeded."

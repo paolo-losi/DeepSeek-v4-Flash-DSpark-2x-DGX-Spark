@@ -11,8 +11,15 @@
 > **This is the updated recipe for DeepSeek v4 Flash GA (0731).**
 
 Self-contained two-node DGX Spark recipe for serving `DeepSeek-V4-Flash-0731`
-with vLLM TP=2, DSpark speculative decoding, and a **1M-token** default max
-model length using the experimental `nvfp4_ds_mla` KV-cache path.
+with vLLM TP=2 and a **1M-token** maximum model length.
+
+> [!IMPORTANT]
+> **FP8 profile in this checkout:** the active deployment uses
+> DeepSeek/vLLM's standard `fp8` KV-cache selection (normalized by the GB10
+> backend to packed `fp8_ds_mla`), regular CUDA graphs, DSpark speculative
+> decoding at k=5, and `MAX_NUM_SEQS=6`. It does **not** use the experimental
+> `nvfp4_ds_mla` KV-cache path. NVFP4 benchmark material later in this README is
+> retained as historical upstream evidence, not as the active configuration.
 
 ## Current runtime (this checkout)
 
@@ -60,16 +67,17 @@ logic ships inside the image rather than as a host bind-mount.
 > `docker-compose.stage-c.override.yml`.
 
 
-**Default agent-serving profile** (`.env.dspark.example` and README defaults):
+**Production profile** (`.env.dspark.example` and `HOWTO.md`):
 
 - image: `ghcr.io/anemll/dspark-vllm-gx10:0.1.1`
 - model: `deepseek-ai/DeepSeek-V4-Flash-0731` (HF hub id; resolved offline from cache when `HF_HUB_OFFLINE=1`)
 - `max_model_len=1048576` (**1M** — keep this as the documented default)
 - `max_num_seqs=6`
 - `max_num_batched_tokens=8192`
-- `kv_cache_dtype=nvfp4_ds_mla`
+- `kv_cache_dtype=fp8` (GB10 resolves it to `fp8_ds_mla`)
 - `gpu_memory_utilization=0.80`
 - `MTP_NUM_TOKENS=5` (checkpoint `dspark_block_size` is 5; k must be ≥ 5)
+- `ENABLE_DSPARK_SPECULATIVE=1`, `ENFORCE_EAGER=0`
 - `DEFAULT_THINKING=low` (`off`, `low`, `high`, or `max`; request-level overrides still win)
 - `VLLM_USE_BREAKABLE_CUDAGRAPH=0` (keep regular CUDA graphs; Anemll auto-enables the slower breakable path when unset)
 - API bind address `0.0.0.0:8888`
@@ -95,11 +103,12 @@ changing the recipe default.
 > GPU_MEMORY_UTILIZATION=0.87
 > ```
 
-This repo documents the validated 0731 1M NVFP4 agent profile, historical
-preview / Stage-C checkpoints, and the current Anemll prebuilt runtime:
+The remainder of this upstream README retains historical NVFP4 benchmark and
+Stage-C material. It is not the active profile; use the FP8 settings above and
+the root `HOWTO.md` for reproduction. Historical evidence includes:
 
 - default checkpoint `deepseek-ai/DeepSeek-V4-Flash-0731` @ `9e165c30e2704aec5d9d593cce3eebd58bbef1cb`
-- default `max_model_len=1048576` (1M), `max_num_seqs=6`, `kv_cache_dtype=nvfp4_ds_mla`, `MTP_NUM_TOKENS=5`
+- historical `max_model_len=1048576` (1M), `max_num_seqs=6`, `kv_cache_dtype=nvfp4_ds_mla`, `MTP_NUM_TOKENS=5`
 - default image `ghcr.io/anemll/dspark-vllm-gx10:0.1.1` (~2.5M-token KV pool on this cluster at util≈0.835; ~2.8M on the prior preview lane at util 0.85)
 - 0731 is text-only; pair with a multimodal sidecar when image input is required
 - 900K acceptance + concurrency/prefill sweep published under `results/`
