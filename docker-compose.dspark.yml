@@ -22,6 +22,10 @@ services:
       # Anemll layout (vLLM ships DSpark under v1/worker/gpu/spec_decode).
       # GB10 hybrid plugin tree for ENABLE_VLLM_GB10_PATCH=1 only.
       - ${VLLM_GB10_PATCH_DIR:-./vllm_patch_gb10}:/opt/vllm-gb10-hybrid-nvfp4
+      # Issue #21 encoder hotfix (encode_arguments_to_dsml dict tool args).
+      - ${DSPARK_ENCODING_ISSUE21_HOTFIX:-./patches/hotfix-encoding-dsv4-issue21.py}:/opt/hotfix-encoding-dsv4-issue21.py:ro
+      # Issue #22 nvfp4_ds_mla long-context decode hotfix (inert for fp8 KV).
+      - ${DSPARK_NVFP4_ISSUE22_HOTFIX:-./patches/hotfix-nvfp4-ds-mla-issue22.sh}:/opt/hotfix-nvfp4-ds-mla-issue22.sh:ro
       - ${DSPARK_TMP_HOST:-${HOME}/.cache/dspark-tmp}:/tmp
 
     # Env surface is split by runtime image:
@@ -34,6 +38,8 @@ services:
       TRANSFORMERS_OFFLINE: "${TRANSFORMERS_OFFLINE:-0}"
       HF_HUB_DISABLE_XET: "${HF_HUB_DISABLE_XET:-1}"
       DSPARK_ENCODING_FILE: "${DSPARK_ENCODING_FILE:-}"
+      # Issue #22 hotfix opt-out (1 = skip nvfp4_ds_mla kernel-dispatch patch).
+      DSPARK_SKIP_HOTFIX: "${DSPARK_SKIP_HOTFIX:-0}"
       VLLM_CACHE_ROOT: /cache/huggingface/vllm-cache
       VLLM_HOST_IP: "${VLLM_HOST_IP:-}"
 
@@ -101,7 +107,8 @@ services:
         ENCODING_SOURCE="$${DSPARK_ENCODING_FILE:-}";
         if [ -z "$${ENCODING_SOURCE}" ]; then for candidate in /cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Flash-0731/snapshots/*/encoding/encoding_dsv4.py; do if [ -f "$${candidate}" ]; then ENCODING_SOURCE="$${candidate}"; break; fi; done; fi;
         if [ -z "$${ENCODING_SOURCE}" ] && [ -f /models/deepseek-ai/DeepSeek-V4-Flash-0731/encoding/encoding_dsv4.py ]; then ENCODING_SOURCE=/models/deepseek-ai/DeepSeek-V4-Flash-0731/encoding/encoding_dsv4.py; fi;
-        if [ -n "$${ENCODING_SOURCE}" ] && [ -f "$${ENCODING_SOURCE}" ]; then cp "$${ENCODING_SOURCE}" /usr/local/lib/python3.12/dist-packages/vllm/tokenizers/deepseek_v4_encoding.py; python3 -c 'from pathlib import Path; p=Path("/usr/local/lib/python3.12/dist-packages/vllm/tokenizers/deepseek_v4.py"); s=p.read_text(); old="elif reasoning_effort in (\"max\", \"xhigh\"):\n                reasoning_effort = \"max\"\n            else:\n                reasoning_effort = \"high\""; new="elif reasoning_effort in (\"max\", \"xhigh\"):\n                reasoning_effort = \"max\"\n            elif reasoning_effort == \"high\":\n                reasoning_effort = \"high\"\n            else:\n                reasoning_effort = \"low\""; updated=s.replace(old,new); assert new in updated; p.write_text(updated)'; fi;
+        if [ -n "$${ENCODING_SOURCE}" ] && [ -f "$${ENCODING_SOURCE}" ]; then cp "$${ENCODING_SOURCE}" /usr/local/lib/python3.12/dist-packages/vllm/tokenizers/deepseek_v4_encoding.py; python3 -c 'from pathlib import Path; p=Path("/usr/local/lib/python3.12/dist-packages/vllm/tokenizers/deepseek_v4.py"); s=p.read_text(); old="elif reasoning_effort in (\"max\", \"xhigh\"):\n                reasoning_effort = \"max\"\n            else:\n                reasoning_effort = \"high\""; new="elif reasoning_effort in (\"max\", \"xhigh\"):\n                reasoning_effort = \"max\"\n            elif reasoning_effort == \"high\":\n                reasoning_effort = \"high\"\n            else:\n                reasoning_effort = \"low\""; updated=s.replace(old,new); assert new in updated; p.write_text(updated)'; python3 /opt/hotfix-encoding-dsv4-issue21.py; fi;
+        if [ "$${DSPARK_SKIP_HOTFIX:-0}" != "1" ] && [ -f /opt/hotfix-nvfp4-ds-mla-issue22.sh ]; then bash /opt/hotfix-nvfp4-ds-mla-issue22.sh || true; fi;
         VLLM_QUANTIZATION_ARGS="";
         if [ "$${ENABLE_VLLM_GB10_PATCH:-0}" = "1" ]; then
           python3 -m pip install -e /opt/vllm-gb10-hybrid-nvfp4 --no-deps;

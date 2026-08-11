@@ -432,6 +432,18 @@ print_resolved_profile() {
     echo "  GB10 vLLM patch dir: $VLLM_GB10_PATCH_DIR"
     echo "  GB10 hybrid NVFP4 M threshold: ${GB10_HYBRID_NVFP4_M_THRESHOLD:-128}"
   fi
+  if [ -f "$SCRIPT_DIR/patches/hotfix-encoding-dsv4-issue21.py" ]; then
+    echo "  Issue #21 encoding hotfix: will apply at boot"
+  else
+    echo "  Issue #21 encoding hotfix: NOT FOUND"
+  fi
+  if [ "${DSPARK_SKIP_HOTFIX:-0}" = "1" ]; then
+    echo "  Issue #22 nvfp4 hotfix: SKIPPED (DSPARK_SKIP_HOTFIX=1)"
+  elif [ -f "$SCRIPT_DIR/patches/hotfix-nvfp4-ds-mla-issue22.sh" ]; then
+    echo "  Issue #22 nvfp4 hotfix: will apply at boot (inert for fp8 KV)"
+  else
+    echo "  Issue #22 nvfp4 hotfix: NOT FOUND"
+  fi
 }
 
 validate_compose() {
@@ -503,6 +515,16 @@ scp "$COMPOSE_FILE" "${WORKER_HOST}:${REMOTE_COMPOSE_FILE}"
 scp "$ENV_FILE" "${WORKER_HOST}:${REMOTE_ENV_FILE}"
 ssh "$WORKER_HOST" "mkdir -p $REMOTE_WORKER_DIR/recipe/vllm/v1/spec_decode"
 scp "$DSPARK_PROPOSER_FILE" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/recipe/vllm/v1/spec_decode/dspark_proposer.py"
+# Sync Issue #21 + #22 hotfixes (applied at boot via compose mounts).
+ssh "$WORKER_HOST" "mkdir -p '${REMOTE_WORKER_DIR}/patches'"
+DSPARK_ENCODING_ISSUE21_HOTFIX="${DSPARK_ENCODING_ISSUE21_HOTFIX:-$SCRIPT_DIR/patches/hotfix-encoding-dsv4-issue21.py}"
+DSPARK_NVFP4_ISSUE22_HOTFIX="${DSPARK_NVFP4_ISSUE22_HOTFIX:-$SCRIPT_DIR/patches/hotfix-nvfp4-ds-mla-issue22.sh}"
+if [ -f "$DSPARK_ENCODING_ISSUE21_HOTFIX" ]; then
+  scp "$DSPARK_ENCODING_ISSUE21_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-encoding-dsv4-issue21.py"
+fi
+if [ -f "$DSPARK_NVFP4_ISSUE22_HOTFIX" ]; then
+  scp "$DSPARK_NVFP4_ISSUE22_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-nvfp4-ds-mla-issue22.sh"
+fi
 if [ "$ENABLE_VLLM_GB10_PATCH" = "1" ]; then
   echo "Syncing GB10 vLLM patch to ${WORKER_HOST}:${WORKER_DIR}/vllm_patch_gb10"
   tar -C "$VLLM_GB10_PATCH_DIR" \
