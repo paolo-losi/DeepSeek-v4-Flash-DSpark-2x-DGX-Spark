@@ -14,7 +14,7 @@ rev: cbd719fe1efc874d7ff1775b0977899f3b210a30
 #   ff093bd Merge PR #25: warn when pinned revision missing from local HF cache
 #   831b1db Backport #44993 grammar-boundary fix (issue #24): json_schema + thinking corruption
 #   cbd719f Digest-pin DSPARK_VLLM_IMAGE in .env.dspark.example (immutable manifest)
-#             -> digest pin NOT adopted: unverified on this cluster (see .env.dspark.example)
+#             -> digest pin ADOPTED + verified on cluster (a83948492cf1; matches prod)
 
 merged-on: 2026-08-12
 # Next sync: anything after cbd719f on origin/main is unmerged.
