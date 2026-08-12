@@ -1,0 +1,20 @@
+# Manual upstream merge marker
+#
+# Upstream repo : github.com/MiaAI-Lab/DeepSeek-v4-Flash-DSpark-2x-DGX-Spark
+# Local remote  : origin
+#
+# Last upstream revision merged manually (tree-level port, FP8 profile):
+rev: cbd719fe1efc874d7ff1775b0977899f3b210a30
+    message: "Digest-pin DSPARK_VLLM_IMAGE in .env.dspark.example (immutable manifest)"
+
+# Window integrated: 0490d5f..cbd719f (6 commit)
+#   0490d5f Backport six vLLM 0.27 DSV4 perf hotfixes to 0.1.1 image
+#   b43d7c5 Move DSV4 v0.27 hotfix changelog to top under 2026-08-12   (skipped: fork CHANGELOG)
+#   5448679 Remove v027 hotfix handoff doc; drop its CHANGELOG reference  (skipped: doc never ported)
+#   ff093bd Merge PR #25: warn when pinned revision missing from local HF cache
+#   831b1db Backport #44993 grammar-boundary fix (issue #24): json_schema + thinking corruption
+#   cbd719f Digest-pin DSPARK_VLLM_IMAGE in .env.dspark.example (immutable manifest)
+#             -> digest pin NOT adopted: unverified on this cluster (see .env.dspark.example)
+
+merged-on: 2026-08-12
+# Next sync: anything after cbd719f on origin/main is unmerged.

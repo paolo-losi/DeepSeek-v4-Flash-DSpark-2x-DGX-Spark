@@ -437,12 +437,19 @@ print_resolved_profile() {
   else
     echo "  Issue #21 encoding hotfix: NOT FOUND"
   fi
-  if [ "${DSPARK_SKIP_HOTFIX:-0}" = "1" ]; then
-    echo "  Issue #22 nvfp4 hotfix: SKIPPED (DSPARK_SKIP_HOTFIX=1)"
-  elif [ -f "$SCRIPT_DIR/patches/hotfix-nvfp4-ds-mla-issue22.sh" ]; then
-    echo "  Issue #22 nvfp4 hotfix: will apply at boot (inert for fp8 KV)"
+  if [ -f "$SCRIPT_DIR/patches/hotfix-nvfp4-ds-mla-issue22.sh" ]; then
+    if [ "${DSPARK_SKIP_ISSUE22_HOTFIX:-0}" = "1" ]; then
+      echo "  Issue #22 nvfp4 hotfix: SKIPPED (DSPARK_SKIP_ISSUE22_HOTFIX=1)"
+    else
+      echo "  Issue #22 nvfp4 hotfix: will apply at boot (inert for fp8 KV)"
+    fi
   else
     echo "  Issue #22 nvfp4 hotfix: NOT FOUND"
+  fi
+  if [ "${DSPARK_SKIP_HOTFIX:-0}" = "1" ]; then
+    echo "  DSV4 v0.27 perf hotfixes (#50312/#50004/#49486/#48407/#48957/#50298/#44993): SKIPPED (DSPARK_SKIP_HOTFIX=1)"
+  else
+    echo "  DSV4 v0.27 perf hotfixes (#50312/#50004/#49486/#48407/#48957/#50298/#44993): will apply at boot"
   fi
 }
 
@@ -515,7 +522,9 @@ scp "$COMPOSE_FILE" "${WORKER_HOST}:${REMOTE_COMPOSE_FILE}"
 scp "$ENV_FILE" "${WORKER_HOST}:${REMOTE_ENV_FILE}"
 ssh "$WORKER_HOST" "mkdir -p $REMOTE_WORKER_DIR/recipe/vllm/v1/spec_decode"
 scp "$DSPARK_PROPOSER_FILE" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/recipe/vllm/v1/spec_decode/dspark_proposer.py"
-# Sync Issue #21 + #22 hotfixes (applied at boot via compose mounts).
+# Sync hotfixes to the worker (applied at boot via compose mounts, no
+# post-start restart): Issue #21+#22 plus the DSV4 v0.27 perf/correctness
+# backports (#50312/#50004/#49486/#48407/#48957/#50298/#44993).
 ssh "$WORKER_HOST" "mkdir -p '${REMOTE_WORKER_DIR}/patches'"
 DSPARK_ENCODING_ISSUE21_HOTFIX="${DSPARK_ENCODING_ISSUE21_HOTFIX:-$SCRIPT_DIR/patches/hotfix-encoding-dsv4-issue21.py}"
 DSPARK_NVFP4_ISSUE22_HOTFIX="${DSPARK_NVFP4_ISSUE22_HOTFIX:-$SCRIPT_DIR/patches/hotfix-nvfp4-ds-mla-issue22.sh}"
@@ -525,6 +534,11 @@ fi
 if [ -f "$DSPARK_NVFP4_ISSUE22_HOTFIX" ]; then
   scp "$DSPARK_NVFP4_ISSUE22_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-nvfp4-ds-mla-issue22.sh"
 fi
+for _hf in hotfix-dsv4-mtp-buffer-50312.sh hotfix-dsv4-adaptive-topk-50004.sh hotfix-dsv4-skip-topk-49486.sh hotfix-dsv4-dense-prefill-indexer-48407.sh hotfix-dsv4-skip-empty-c128-48957.sh hotfix-dsv4-flashmla-workspace-50298.sh hotfix-dsv4-grammar-advance.sh; do
+  if [ -f "$SCRIPT_DIR/patches/$_hf" ]; then
+    scp "$SCRIPT_DIR/patches/$_hf" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/$_hf"
+  fi
+done
 if [ "$ENABLE_VLLM_GB10_PATCH" = "1" ]; then
   echo "Syncing GB10 vLLM patch to ${WORKER_HOST}:${WORKER_DIR}/vllm_patch_gb10"
   tar -C "$VLLM_GB10_PATCH_DIR" \

@@ -26,6 +26,18 @@ services:
       - ${DSPARK_ENCODING_ISSUE21_HOTFIX:-./patches/hotfix-encoding-dsv4-issue21.py}:/opt/hotfix-encoding-dsv4-issue21.py:ro
       # Issue #22 nvfp4_ds_mla long-context decode hotfix (inert for fp8 KV).
       - ${DSPARK_NVFP4_ISSUE22_HOTFIX:-./patches/hotfix-nvfp4-ds-mla-issue22.sh}:/opt/hotfix-nvfp4-ds-mla-issue22.sh:ro
+      # DSV4 v0.27 perf/correctness hotfixes backported to Anemll 0.1.1
+      # (#50312 MTP buffer, #50004 adaptive topk, #49486 short-context topk,
+      # #48407 dense-prefill indexer [dormant], #48957 empty-C128 skip,
+      # #50298 FlashMLA workspace reuse, #44993 grammar boundary).
+      # Applied at boot like #22 — set DSPARK_SKIP_HOTFIX=1 to skip all seven.
+      - ${DSPARK_HOTFIX_MTP_BUFFER:-./patches/hotfix-dsv4-mtp-buffer-50312.sh}:/opt/hotfix-dsv4-mtp-buffer-50312.sh:ro
+      - ${DSPARK_HOTFIX_ADAPTIVE_TOPK:-./patches/hotfix-dsv4-adaptive-topk-50004.sh}:/opt/hotfix-dsv4-adaptive-topk-50004.sh:ro
+      - ${DSPARK_HOTFIX_SKIP_TOPK:-./patches/hotfix-dsv4-skip-topk-49486.sh}:/opt/hotfix-dsv4-skip-topk-49486.sh:ro
+      - ${DSPARK_HOTFIX_DENSE_INDEXER:-./patches/hotfix-dsv4-dense-prefill-indexer-48407.sh}:/opt/hotfix-dsv4-dense-prefill-indexer-48407.sh:ro
+      - ${DSPARK_HOTFIX_SKIP_C128:-./patches/hotfix-dsv4-skip-empty-c128-48957.sh}:/opt/hotfix-dsv4-skip-empty-c128-48957.sh:ro
+      - ${DSPARK_HOTFIX_FLASHMLA_WS:-./patches/hotfix-dsv4-flashmla-workspace-50298.sh}:/opt/hotfix-dsv4-flashmla-workspace-50298.sh:ro
+      - ${DSPARK_HOTFIX_GRAMMAR:-./patches/hotfix-dsv4-grammar-advance.sh}:/opt/hotfix-dsv4-grammar-advance.sh:ro
       - ${DSPARK_TMP_HOST:-${HOME}/.cache/dspark-tmp}:/tmp
 
     # Env surface is split by runtime image:
@@ -38,8 +50,12 @@ services:
       TRANSFORMERS_OFFLINE: "${TRANSFORMERS_OFFLINE:-0}"
       HF_HUB_DISABLE_XET: "${HF_HUB_DISABLE_XET:-1}"
       DSPARK_ENCODING_FILE: "${DSPARK_ENCODING_FILE:-}"
-      # Issue #22 hotfix opt-out (1 = skip nvfp4_ds_mla kernel-dispatch patch).
+      # DSV4 hotfix opt-outs:
+      #   DSPARK_SKIP_HOTFIX=1        skip the DSV4 v0.27 perf/correctness backports
+      #                                (#50312/#50004/#49486/#48407/#48957/#50298/#44993).
+      #   DSPARK_SKIP_ISSUE22_HOTFIX=1 also skip the #22 nvfp4 kernel-dispatch patch.
       DSPARK_SKIP_HOTFIX: "${DSPARK_SKIP_HOTFIX:-0}"
+      DSPARK_SKIP_ISSUE22_HOTFIX: "${DSPARK_SKIP_ISSUE22_HOTFIX:-0}"
       VLLM_CACHE_ROOT: /cache/huggingface/vllm-cache
       VLLM_HOST_IP: "${VLLM_HOST_IP:-}"
 
@@ -108,7 +124,8 @@ services:
         if [ -z "$${ENCODING_SOURCE}" ]; then for candidate in /cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Flash-0731/snapshots/*/encoding/encoding_dsv4.py; do if [ -f "$${candidate}" ]; then ENCODING_SOURCE="$${candidate}"; break; fi; done; fi;
         if [ -z "$${ENCODING_SOURCE}" ] && [ -f /models/deepseek-ai/DeepSeek-V4-Flash-0731/encoding/encoding_dsv4.py ]; then ENCODING_SOURCE=/models/deepseek-ai/DeepSeek-V4-Flash-0731/encoding/encoding_dsv4.py; fi;
         if [ -n "$${ENCODING_SOURCE}" ] && [ -f "$${ENCODING_SOURCE}" ]; then cp "$${ENCODING_SOURCE}" /usr/local/lib/python3.12/dist-packages/vllm/tokenizers/deepseek_v4_encoding.py; python3 -c 'from pathlib import Path; p=Path("/usr/local/lib/python3.12/dist-packages/vllm/tokenizers/deepseek_v4.py"); s=p.read_text(); old="elif reasoning_effort in (\"max\", \"xhigh\"):\n                reasoning_effort = \"max\"\n            else:\n                reasoning_effort = \"high\""; new="elif reasoning_effort in (\"max\", \"xhigh\"):\n                reasoning_effort = \"max\"\n            elif reasoning_effort == \"high\":\n                reasoning_effort = \"high\"\n            else:\n                reasoning_effort = \"low\""; updated=s.replace(old,new); assert new in updated; p.write_text(updated)'; python3 /opt/hotfix-encoding-dsv4-issue21.py; fi;
-        if [ "$${DSPARK_SKIP_HOTFIX:-0}" != "1" ] && [ -f /opt/hotfix-nvfp4-ds-mla-issue22.sh ]; then bash /opt/hotfix-nvfp4-ds-mla-issue22.sh || true; fi;
+        if [ "$${DSPARK_SKIP_ISSUE22_HOTFIX:-0}" != "1" ] && [ -f /opt/hotfix-nvfp4-ds-mla-issue22.sh ]; then bash /opt/hotfix-nvfp4-ds-mla-issue22.sh || true; fi;
+        if [ "$${DSPARK_SKIP_HOTFIX:-0}" != "1" ]; then for _hf in hotfix-dsv4-mtp-buffer-50312.sh hotfix-dsv4-adaptive-topk-50004.sh hotfix-dsv4-skip-topk-49486.sh hotfix-dsv4-dense-prefill-indexer-48407.sh hotfix-dsv4-skip-empty-c128-48957.sh hotfix-dsv4-flashmla-workspace-50298.sh hotfix-dsv4-grammar-advance.sh; do if [ -f "/opt/$${_hf}" ]; then bash "/opt/$${_hf}" || true; fi; done; fi;
         VLLM_QUANTIZATION_ARGS="";
         MODEL_REVISION_ARGS="";
         if [ -n "${DSPARK_MODEL_REVISION:-}" ]; then MODEL_REVISION_ARGS="--revision ${DSPARK_MODEL_REVISION}"; fi;

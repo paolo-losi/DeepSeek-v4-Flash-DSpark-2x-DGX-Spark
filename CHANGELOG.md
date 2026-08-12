@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Port DSV4 v0.27 perf/correctness backports + PR #25 from upstream MiaAI-Lab** (manual tree-level merge to `cbd719f`; see `rev.txt`):
+  - Boot-time DSV4 hotfixes (same no-restart lifecycle as #21/#22): #50312 MTP PP buffer (≈448 MiB), #50004 adaptive C128A topk, #49486 short-context topk skip, #48407 dense-prefill indexer (dormant), #48957 empty-C128 skip, #50298 FlashMLA workspace reuse, #44993 grammar-boundary (issue #24: `json_schema` + thinking).
+  - Dual opt-out flags: `DSPARK_SKIP_HOTFIX=1` (perf/correctness backports) and `DSPARK_SKIP_ISSUE22_HOTFIX=1` (#22 nvfp4 patch) — new semantics for `DSPARK_SKIP_HOTFIX`, previously the #22 gate.
+  - `validate-dspark-config.sh`: warn when the pinned `DSPARK_MODEL_REVISION` is missing from the local HF cache (PR #25), avoiding a silent ~155 GB download.
+  - New bench/verification tooling: `scripts/bench-ttft.py`, `compare-bench.py`, `verify-dsv4-027-equality-gate.py`, `bench-patches.sh`, `bench-baseline-{no-patches,issue22-only}.sh`, `bench-issue24-repro.py`; `docs/vllm-027-new-patches.md`.
+  - FP8 profile and boot-time hotfix mechanism preserved; upstream NVFP4 default, VL sidecar and abliterated flags intentionally not pulled.
 - **Raise `DEFAULT_THINKING` from `low` to `max`** in `.env.dspark.example`, enabling full reasoning effort by default. Request-level overrides still take precedence.
 - Make `deepseek-ai/DeepSeek-V4-Flash-0731` the default checkpoint for the two-Spark 1M profile.
 - Document the 0731 encoding, parser, and vision boundaries.
