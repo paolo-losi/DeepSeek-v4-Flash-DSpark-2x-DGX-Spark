@@ -4,17 +4,40 @@
 # Local remote  : origin
 #
 # Last upstream revision merged manually (tree-level port, FP8 profile):
-rev: cbd719fe1efc874d7ff1775b0977899f3b210a30
-    message: "Digest-pin DSPARK_VLLM_IMAGE in .env.dspark.example (immutable manifest)"
+rev: f752cd04ab30f2cf42077dd8811a5e1e682d63e7
+    message: "docs(CHANGELOG): record #55 no-regression audit + latent FinishReason finding"
 
-# Window integrated: 0490d5f..cbd719f (6 commit)
-#   0490d5f Backport six vLLM 0.27 DSV4 perf hotfixes to 0.1.1 image
-#   b43d7c5 Move DSV4 v0.27 hotfix changelog to top under 2026-08-12   (skipped: fork CHANGELOG)
-#   5448679 Remove v027 hotfix handoff doc; drop its CHANGELOG reference  (skipped: doc never ported)
-#   ff093bd Merge PR #25: warn when pinned revision missing from local HF cache
-#   831b1db Backport #44993 grammar-boundary fix (issue #24): json_schema + thinking corruption
-#   cbd719f Digest-pin DSPARK_VLLM_IMAGE in .env.dspark.example (immutable manifest)
-#             -> digest pin ADOPTED + verified on cluster (a83948492cf1; matches prod)
+# Window integrated: cbd719f..f752cd0 (26 commit)
+# Functional hotfixes ported (tree-level, FP8 profile):
+#   2f180e7 fix(sched): enforce max_num_partial_prefills (issue #27)
+#             -> patches/hotfix-dsv4-issue27-partial-prefill-concurrency.py
+#                + LONG_PREFILL_TOKEN_THRESHOLD=1024 + --long-prefill-token-threshold
+#   f2d28bf fix(sched): bounded decode service + per-step diag (issue #43)
+#             -> patches/hotfix-dsv4-issue43-decode-fairness-and-diag.py
+#                + DSPARK_ISSUE43_SCHED_DIAG knob (off by default)
+#   1f9765e + 7048daf fix(kv): hybrid SWA prefix-cache (issue #26/#36)
+#             -> patches/hotfix-dsv4-issue26-hybrid-swa-min.py (v2)
+#                + VLLM_PREFIX_CACHE_RETENTION_INTERVAL=4096
+#   2689b1f feat(v2): GPU-resident thinking_token_budget (PR #48)
+#             -> patches/hotfix-dsv4-issue31-v2-thinking-budget-gpu.py
+#                (opt-in per request; pi-models compat flag added)
+#   db9b9ce fix(issue55): finish_reason=length on tool-call truncation
+#             -> patches/hotfix-dsv4-issue55-tool-truncation.py
+#   f2305b1 + 027b51a fix(serve): suppress client stops until </think>
+#             -> patches/hotfix-dsv4-suppress-stops-in-reasoning.py
+#                + DSPARK_SKIP_SUPPRESS_STOPS_HOTFIX / DSPARK_SUPPRESS_STOPS_IN_REASONING
+#   27a5569 fix(serve): stop without hanging (#38)
+#             -> stop script: docker rm -f before down; down --remove-orphans -t 1
+#                (restart/stop_grace compose knobs NOT ported; entrypoint boot-
+#                time hotfix application was already in place on the fork)
+#
+# Intermediate V1 thinking-budget commits withdrawn upstream by
+# 76ca4e5 + b6b91c0 reverts — final state on main is the GPU V2 only.
+#
+# Skipped (fork maintains its own CHANGELOG/README; docs/CI/tests only):
+#   2d87238, d903470, 3d11d0c, f752cd0 (CHANGELOG-only)
+#   655d4fc, c3c8991, e3659ad, 1969774, e026ecf, fb6cbd1 (docs/README/.github)
+#   5cdb9aa ci-validate + reproduce/test scripts (validation-only)
 
-merged-on: 2026-08-12
-# Next sync: anything after cbd719f on origin/main is unmerged.
+merged-on: 2026-08-14
+# Next sync: anything after f752cd0 on origin/main is unmerged.

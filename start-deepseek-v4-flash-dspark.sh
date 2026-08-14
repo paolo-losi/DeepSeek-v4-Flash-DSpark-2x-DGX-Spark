@@ -451,6 +451,20 @@ print_resolved_profile() {
   else
     echo "  DSV4 v0.27 perf hotfixes (#50312/#50004/#49486/#48407/#48957/#50298/#44993): will apply at boot"
   fi
+  for _py in hotfix-dsv4-issue31-v2-thinking-budget-gpu.py hotfix-dsv4-issue55-tool-truncation.py hotfix-dsv4-issue27-partial-prefill-concurrency.py hotfix-dsv4-issue43-decode-fairness-and-diag.py hotfix-dsv4-issue26-hybrid-swa-min.py; do
+    if [ -f "$SCRIPT_DIR/patches/$_py" ]; then
+      echo "  $_py: will apply at boot"
+    else
+      echo "  $_py: NOT FOUND"
+    fi
+  done
+  if [ "${DSPARK_SKIP_SUPPRESS_STOPS_HOTFIX:-0}" = "1" ]; then
+    echo "  Suppress stops in <think>: SKIPPED (DSPARK_SKIP_SUPPRESS_STOPS_HOTFIX=1)"
+  elif [ "${DSPARK_SUPPRESS_STOPS_IN_REASONING:-${VLLM_SUPPRESS_STOPS_IN_REASONING:-1}}" = "0" ]; then
+    echo "  Suppress stops in <think>: hotfix applies but guard off (DSPARK_SUPPRESS_STOPS_IN_REASONING=0)"
+  else
+    echo "  Suppress stops in <think>: will apply (client stop dormant until </think>)"
+  fi
 }
 
 validate_compose() {
@@ -523,8 +537,9 @@ scp "$ENV_FILE" "${WORKER_HOST}:${REMOTE_ENV_FILE}"
 ssh "$WORKER_HOST" "mkdir -p $REMOTE_WORKER_DIR/recipe/vllm/v1/spec_decode"
 scp "$DSPARK_PROPOSER_FILE" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/recipe/vllm/v1/spec_decode/dspark_proposer.py"
 # Sync hotfixes to the worker (applied at boot via compose mounts, no
-# post-start restart): Issue #21+#22 plus the DSV4 v0.27 perf/correctness
-# backports (#50312/#50004/#49486/#48407/#48957/#50298/#44993).
+# post-start restart): Issue #21+#22, the DSV4 v0.27 perf/correctness
+# backports (#50312/#50004/#49486/#48407/#48957/#50298/#44993), and the
+# scheduler/engine .py hotfixes (#31/#55/#27/#43/#26/#suppress-stops).
 ssh "$WORKER_HOST" "mkdir -p '${REMOTE_WORKER_DIR}/patches'"
 DSPARK_ENCODING_ISSUE21_HOTFIX="${DSPARK_ENCODING_ISSUE21_HOTFIX:-$SCRIPT_DIR/patches/hotfix-encoding-dsv4-issue21.py}"
 DSPARK_NVFP4_ISSUE22_HOTFIX="${DSPARK_NVFP4_ISSUE22_HOTFIX:-$SCRIPT_DIR/patches/hotfix-nvfp4-ds-mla-issue22.sh}"
@@ -539,6 +554,30 @@ for _hf in hotfix-dsv4-mtp-buffer-50312.sh hotfix-dsv4-adaptive-topk-50004.sh ho
     scp "$SCRIPT_DIR/patches/$_hf" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/$_hf"
   fi
 done
+DSPARK_ISSUE31_GPU_HOTFIX="${DSPARK_ISSUE31_GPU_HOTFIX:-$SCRIPT_DIR/patches/hotfix-dsv4-issue31-v2-thinking-budget-gpu.py}"
+if [ -f "$DSPARK_ISSUE31_GPU_HOTFIX" ]; then
+  scp "$DSPARK_ISSUE31_GPU_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-dsv4-issue31-v2-thinking-budget-gpu.py"
+fi
+DSPARK_ISSUE55_HOTFIX="${DSPARK_ISSUE55_HOTFIX:-$SCRIPT_DIR/patches/hotfix-dsv4-issue55-tool-truncation.py}"
+if [ -f "$DSPARK_ISSUE55_HOTFIX" ]; then
+  scp "$DSPARK_ISSUE55_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-dsv4-issue55-tool-truncation.py"
+fi
+DSPARK_ISSUE27_HOTFIX="${DSPARK_ISSUE27_HOTFIX:-$SCRIPT_DIR/patches/hotfix-dsv4-issue27-partial-prefill-concurrency.py}"
+if [ -f "$DSPARK_ISSUE27_HOTFIX" ]; then
+  scp "$DSPARK_ISSUE27_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-dsv4-issue27-partial-prefill-concurrency.py"
+fi
+DSPARK_ISSUE43_HOTFIX="${DSPARK_ISSUE43_HOTFIX:-$SCRIPT_DIR/patches/hotfix-dsv4-issue43-decode-fairness-and-diag.py}"
+if [ -f "$DSPARK_ISSUE43_HOTFIX" ]; then
+  scp "$DSPARK_ISSUE43_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-dsv4-issue43-decode-fairness-and-diag.py"
+fi
+DSPARK_ISSUE26_HOTFIX="${DSPARK_ISSUE26_HOTFIX:-$SCRIPT_DIR/patches/hotfix-dsv4-issue26-hybrid-swa-min.py}"
+if [ -f "$DSPARK_ISSUE26_HOTFIX" ]; then
+  scp "$DSPARK_ISSUE26_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-dsv4-issue26-hybrid-swa-min.py"
+fi
+DSPARK_SUPPRESS_STOPS_HOTFIX="${DSPARK_SUPPRESS_STOPS_HOTFIX:-$SCRIPT_DIR/patches/hotfix-dsv4-suppress-stops-in-reasoning.py}"
+if [ -f "$DSPARK_SUPPRESS_STOPS_HOTFIX" ]; then
+  scp "$DSPARK_SUPPRESS_STOPS_HOTFIX" "${WORKER_HOST}:${REMOTE_WORKER_DIR}/patches/hotfix-dsv4-suppress-stops-in-reasoning.py"
+fi
 if [ "$ENABLE_VLLM_GB10_PATCH" = "1" ]; then
   echo "Syncing GB10 vLLM patch to ${WORKER_HOST}:${WORKER_DIR}/vllm_patch_gb10"
   tar -C "$VLLM_GB10_PATCH_DIR" \
